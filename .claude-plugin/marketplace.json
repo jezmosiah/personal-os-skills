@@ -35,6 +35,15 @@
       "skills": [
         "./skills/tasknotes"
       ]
+    },
+    {
+      "name": "notebooklm-skill",
+      "description": "Import NotebookLM notebooks into Obsidian as linked knowledge graphs with citations",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/notebooklm"
+      ]
     }
   ]
 }
