@@ -1,102 +1,80 @@
 # Ask Notebook Workflow
 
-Ask a NotebookLM notebook a question and save the answer as a vault reference note with `[N]` citations resolved to `[[wikilinks]]`.
+Ask a NotebookLM notebook a question and save the answer as a vault reference note with `[N]` citations linked to source files.
 
 ## Inputs
 
 - **question**: The question to ask
-- **title**: Short title for the Q&A note (e.g. "Emerging Themes Across 20 Videos")
+- **title**: Short title for the Q&A note
 - **notebook-slug**: Which notebook folder to use
-- **dashboard-title**: Dashboard to link to via `related`
-
-If asking multiple questions, batch them into one note or create separate notes.
+- **notebook-id**: Full UUID of the notebook (from `nlm notebook list`)
+- **dashboard-title** (optional): Dashboard to link to via `related`
 
 ## Step 1: Verify Auth
 
 ```bash
-notebooklm status
+nlm auth status
 ```
 
-If auth error: run `notebooklm login` to re-authenticate.
+If auth error, run `nlm auth login` (browser flow).
 
-## Step 2: Ask the Question
+## Step 2: Get Sources
 
 ```bash
-notebooklm ask --new --json "{question}" > /tmp/qa-output.json
+nlm source list {notebook-id} --json > /tmp/nlm-sources.json
 ```
 
-Flags:
-- `--new`: Start a fresh conversation (prevents context leak from prior Q&A)
-- `--json`: Get structured output with `references[]` for citation resolution
+## Step 3: Ask the Question
 
-## Step 3: Extract Passages
+**Delegate to a Haiku sub-agent** to keep JSON out of main context:
 
+```
+Agent(model="haiku", prompt="""
+1. Run: nlm notebook query {notebook-id} "{question}" --json > /tmp/qa-output.json
+2. Return: answer length, citation count, sources_used count
+""")
+```
+
+Or directly:
 ```bash
-python3 .claude/skills/notebooklm/scripts/extract_passages.py \
-  --qa /tmp/qa-output.json \
-  --sources /tmp/notebooklm-sources.json \
-  --slug {notebook-slug} > /tmp/passage-map.json
+nlm notebook query {notebook-id} "{question}" --json > /tmp/qa-output.json
 ```
-
-This writes `## Cited Passages / ### Passage N` sections into source files using the `cited_text` from references (the actual transcript chunks NotebookLM used as evidence). Idempotent - skips sources that already have passages. Outputs a passage mapping JSON for the resolver.
-
-For multiple Q&As, pass all JSON files: `--qa /tmp/qa-1.json /tmp/qa-2.json ...`
 
 ## Step 4: Resolve Citations
 
 ```bash
-python3 .claude/skills/notebooklm/scripts/resolve_citations.py \
+cd /path/to/vault && python3 .claude/skills/notebooklm/scripts/resolve_citations.py \
   --qa /tmp/qa-output.json \
-  --sources /tmp/notebooklm-sources.json \
+  --sources /tmp/nlm-sources.json \
   --slug {notebook-slug} \
-  --passages /tmp/passage-map.json \
   --title "{title}" \
-  --dashboard "{dashboard-title}" \
-  --output "Notes/NotebookLM/{notebook-slug}/QA/{date} {title}.md"
+  --notebook "{Notebook Display Name}" \
+  --output "Notes/NotebookLM/{notebook-slug}/QA/{date} {title}.md" \
+  --vault .
 ```
 
-This:
-1. Deduplicates references by `cited_text` to find unique evidence chunks
-2. Maps answer `[N]` to the Nth unique chunk (not to `citation_number` field)
-3. Expands citation specs (`[1, 2]`, `[3-5]`) into individual numbers
-4. Maps each chunk to its `source_id` -> source file title
-5. Replaces `[N]` markers with `[[Source Title#Passage N]]` wikilinks (passage-level when `--passages` provided)
-6. Writes a `reference` type note with resolved answer + sources table
-7. Lists uncited sources separately (NotebookLM often cites only a subset)
+The `--notebook` flag sets the `related` wikilink to the notebook index file (e.g. `--notebook "Lennys Podcast"` links to `[[Notes/NotebookLM/Lennys Podcast]]`).
 
-**Known limitation:** NotebookLM's `references[]` often covers only a few sources even when the answer synthesizes across all of them. The resolver warns about this and lists uncited sources in a separate section.
+This replaces `[N]` with `[[Source#^anchor|[N]]]` wikilinks. Click opens the source file and jumps to the cited passage.
 
 ## Step 5: Verify
 
-Open the Q&A note in Obsidian and check:
-- [ ] Wikilinks render (not raw `[N]` markers)
-- [ ] Clicking a source wikilink opens the correct source file at the passage
-- [ ] `#Passage N` anchors scroll to the cited evidence in source files
-- [ ] Sources Referenced section at bottom lists all cited sources
-- [ ] Uncited Sources section lists sources without granular citations
-
-## Batch Mode
-
-For multiple questions at once:
-
-```python
-questions = [
-    {"question": "What are the main themes?", "title": "Main Themes"},
-    {"question": "What tools are used?", "title": "Tools Compared"},
-]
-
-for q in questions:
-    # Run notebooklm ask --new --json for each
-    # Run extract_passages.py with ALL Q&A JSONs so far
-    # Run resolve_citations.py with --passages for each
+```bash
+obsidian open path="Notes/NotebookLM/{notebook-slug}/QA/{date} {title}.md" newtab
 ```
 
-Each question gets `--new` to start a fresh conversation. Ask them in parallel if independent. Run extract_passages once with all Q&A files to accumulate passages.
+**CRITICAL: Click 2-3 citation links in Obsidian to verify they jump to the correct passage.** The resolver reporting "N anchors injected" does NOT mean they work. Obsidian block references can silently fail if formatting is wrong.
+
+## Cross-Source Citation Handling
+
+NotebookLM's API returns the same `source_id` for all citations in cross-source synthesis answers. The resolver detects this and remaps citations by parsing `*"episode title"*` section markers in the answer text and fuzzy-matching them to source titles. This works automatically. No single-source workaround needed.
+
+## Anchor Placement
+
+Anchors are placed via substring search: the resolver finds the `cited_text` passage in the source file and inserts a `^c-XXXXXXXX` block ID on its own line with blank lines before and after (required by Obsidian for block indexing). Anchor IDs are derived from MD5 hash of the cited_text content, so they're stable across runs.
 
 ## Output
 
-- Q&A reference note at `Notes/NotebookLM/{notebook-slug}/QA/{date} {title}.md`
-- All `[N]` citations resolved to `[[Source Title#Passage N]]` wikilinks (passage-level)
-- Source files enriched with `## Cited Passages` sections containing the actual evidence
-- Uncited sources listed separately
-- `related` links to dashboard
+- Q&A note at `Notes/NotebookLM/{notebook-slug}/QA/{date} {title}.md`
+- Inline `[N]` rendered as clickable `[[Source#^anchor|[N]]]` links to cited passages in source files
+- Sources list at bottom

@@ -38,11 +38,20 @@
     },
     {
       "name": "notebooklm-skill",
-      "description": "Import NotebookLM notebooks into Obsidian as linked knowledge graphs with citations",
+      "description": "Turn expert podcasts into personalized protocols with cited experiments in your Obsidian morning routine",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/notebooklm"
+      ]
+    },
+    {
+      "name": "notebooklm-import-skill",
+      "description": "Import NotebookLM notebooks into Obsidian as linked knowledge graphs with citations",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/notebooklm-import"
       ]
     },
     {

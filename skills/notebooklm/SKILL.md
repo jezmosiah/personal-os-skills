@@ -1,112 +1,177 @@
 ---
 name: notebooklm
-description: Import NotebookLM notebooks into your Obsidian vault as linked knowledge graphs. Sources become wikilink-able files, Q&A answers get citations resolved to [[wikilinks]] with passage-level deep links. Use when user says "notebooklm import", "import notebook", "notebooklm ask", "notebooklm sources", or wants to turn NotebookLM research into vault knowledge.
+description: "Turn expert podcasts into personalized protocols with cited experiments. Load 300 episodes from terminal, run an expert-informed interview, build experiments in your Obsidian morning routine. Use when user says \"notebooklm\", \"load channel\", \"expert interview\", \"notebooklm ask\", \"health protocol\", or wants to turn expert content into actionable experiments."
 ---
 
-# NotebookLM - Vault Knowledge Graph
+# NotebookLM - Expert Knowledge to Action
 
-Turn NotebookLM notebooks into persistent, linked vault knowledge. Sources become files you can `[[wikilink]]`, Q&A answers get `[N]` citations resolved to those wikilinks, dashboards tie it all together.
+Turn any expert's content into a personalized protocol with experiments you actually run. Load 300 YouTube episodes into NotebookLM from terminal, run a cited interview about your goal, create experiments in your Obsidian daily note.
+
+**Video walkthrough:** [https://youtu.be/KRpZSvtMiTI](https://youtu.be/KRpZSvtMiTI)
+
+## What This Does
+
+1. **Load sources from terminal.** You can't just tell NotebookLM to add a YouTube channel. This skill does it. One command. 300 episodes.
+2. **Cited answers traced to exact transcript lines.** Every recommendation links back to the exact episode and passage. Verifiable.
+3. **Expert-informed interviews.** Claude queries NotebookLM with YOUR goal. Generates questions informed by the expert's research on your specific topic.
+4. **Experiments in Obsidian.** Protocol becomes experiments in your daily note. Morning routine skill asks every day: how is this going?
+5. **Any expert, any domain.** Huberman for health. Lenny for product. Onboarding docs for a new job. Same pattern.
 
 ## Prerequisites
 
-### 1. Install notebooklm-py
+### 1. Install nlm CLI
+
+```bash
+uv tool install notebooklm-mcp-cli
+```
+
+Gives you the `nlm` command. See [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli) for details.
+
+### 2. Install notebooklm-py (for notebook creation and channel loading)
 
 ```bash
 pip install "notebooklm-py[browser]"
 playwright install chromium
 ```
 
-### 2. Authenticate
+### 3. Authenticate
 
 ```bash
+# nlm CLI auth (for queries and source listing)
+nlm auth login
+
+# notebooklm-py auth (for notebook creation and loading)
 notebooklm login
 ```
 
-Opens a browser window - log in with your Google account. Cookies are saved to `~/.notebooklm/storage_state.json`.
+Both open a browser window for Google login. `nlm` saves to its own config, `notebooklm-py` saves cookies to `~/.notebooklm/storage_state.json`.
 
-Re-run `notebooklm login` when cookies expire (you'll see auth errors).
+### 4. Obsidian Plugins
 
-### 3. Obsidian Plugins
-
-- **Dataview** (required) - citation tables and dashboard queries use Dataview/DataviewJS
-
-### 4. Vault Setup
-
-Copy the templates from `templates/` into your vault:
-- `templates/notebook-source.md` -> `Templates/Types/notebook-source.md`
-- `templates/dashboard.md` -> use as reference when creating dashboards
+- **Dataview** (required) - for dashboard queries and citation tables
 
 ## Quick Start
 
 ```bash
-# Check current notebook
-notebooklm status
+# List your notebooks
+nlm notebook list
 
-# Switch notebook
-notebooklm use <notebook-id>
+# Ask a question with citations
+nlm notebook query <notebook-id> "What does Huberman say about deep focus?" --json
 
-# List notebooks
-notebooklm list
+# List sources
+nlm source list <notebook-id> --json
 ```
 
 ## Workflow Routing
 
 | User says | Workflow |
 |-----------|----------|
-| "import notebook", "notebooklm import", "import sources" | [workflows/import.md](workflows/import.md) |
+| "load channel", "youtube channel", "bulk load videos" | [workflows/youtube-channel.md](workflows/youtube-channel.md) |
 | "notebooklm ask", "ask notebook", "Q&A" | [workflows/ask.md](workflows/ask.md) |
+| "import notebook", "import sources" | [workflows/import.md](workflows/import.md) |
+| "notebooklm auth", "notebooklm login" | [workflows/auth.md](workflows/auth.md) |
 
-## Architecture
+## The Full Pipeline
+
+This is the workflow shown in the video:
+
+### 1. Pick your expert and goal
 
 ```
-Your Vault
-├── Notes/NotebookLM/{notebook-slug}/
-│   ├── Sources/          # One .md per source (YouTube, PDF, web, etc.)
-│   │   ├── Video Title.md
-│   │   └── Article Title.md
-│   └── QA/               # Q&A notes with resolved citations
-│       └── 2026-02-23 Emerging Themes.md
+Goal: "I want to improve my health and focus"
+Expert: Andrew Huberman (@hubaborhab on YouTube)
+```
+
+### 2. Load their content
+
+```bash
+# Scrape channel videos
+python3 scripts/load_channel.py scrape \
+  --channel "https://www.youtube.com/@hubaborhab" \
+  --output /tmp/huberman-videos.json
+
+# Create notebook
+notebooklm create "Andrew Huberman - Health"
+
+# Load 200 most recent health-related episodes
+notebooklm use <notebook-id>
+python3 scripts/load_channel.py load \
+  --videos /tmp/huberman-videos.json \
+  --notebook <notebook-id> \
+  --count 200 \
+  --concurrency 20
+```
+
+### 3. Ask expert-informed questions
+
+```bash
+nlm notebook query <notebook-id> \
+  "What does Huberman recommend for sustaining deep focus for 4+ hours daily?" --json
+```
+
+Each answer comes with `[N]` citations back to the exact source and passage.
+
+### 4. Run a cited interview
+
+Claude uses the notebook to generate interview questions specific to YOUR goal. You answer honestly. Claude builds a personalized protocol where each recommendation is tied to an exact episode.
+
+### 5. Create experiments
+
+The protocol becomes experiments in your Obsidian vault:
+- Each experiment has a hypothesis, protocol, success criteria, and timeframe
+- They appear in your daily note every morning
+- Your morning routine skill asks: "How is this experiment going? Any observations?"
+
+### 6. Turn it into a reusable skill
+
+Package the workflow as a `/huberman` or `/lenny` skill. Same pattern, different expert.
+
+## Vault Structure
+
+```
+Your Vault/
+├── Notes/NotebookLM/
+│   ├── Huberman Health.md              # type: notebook (index)
+│   └── huberman-health/
+│       ├── Sources/                     # type: notebook-source (transcripts)
+│       │   └── Episode Title.md
+│       └── QA/                          # type: nlm-query (cited answers)
+│           └── 2026-04-05 Focus Protocol.md
+├── Notes/Experiments/
+│   └── Morning Sunlight Protocol.md     # type: experiment
 └── Notes/Dashboards/
-    └── My Research.md     # Dashboard with Dataview queries
-```
-
-- **Source files** have type `notebook-source` with frontmatter: `source_id`, `notebook_id`, `url`, `source_type`, topics as `[[wikilinks]]`
-- **Q&A notes** have type `reference` with `[N]` citations resolved to `[[Source Title#Passage N]]` wikilinks
-- **Dashboards** use Dataview queries to list sources and Q&A notes
-
-## Data Model
-
-**notebook-source frontmatter:**
-```yaml
-type: notebook-source
-source_id: "uuid"        # NotebookLM source ID
-notebook_id: "uuid"      # NotebookLM notebook ID
-url: ""                  # Original URL
-source_type: youtube     # youtube, pdf, web, text, gdocs, gslides
-status: active
-date: YYYY-MM-DD
-topics:
-  - "[[Topic Name]]"     # AI-extracted topics as wikilinks
-related:
-  - "[[Notes/Dashboards/Dashboard Name]]"
-```
-
-**Q&A reference frontmatter:**
-```yaml
-type: reference
-status: current
-date: YYYY-MM-DD
-source: "notebooklm:{notebook-slug}"
-related:
-  - "[[Notes/Dashboards/Dashboard Name]]"
+    └── Health.md                        # Dashboard with embedded experiments
 ```
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/import_sources.py` | Import sources as vault files with AI-generated guides and topics |
+| `scripts/load_channel.py` | Scrape YouTube channel + bulk-load into NotebookLM |
+| `scripts/resolve_citations.py` | Replace `[N]` with `[[Source#^anchor\|[N]]]` wikilinks |
+| `scripts/import_sources.py` | Import sources as vault files with metadata |
 | `scripts/extract_passages.py` | Extract cited passages from Q&A into source files |
-| `scripts/resolve_citations.py` | Replace `[N]` markers with `[[wikilinks]]` in Q&A answers |
+| `scripts/backfill_fulltext.py` | Fetch full transcripts for source files |
 
-All scripts use `Path.cwd()` as vault root - run them from your vault directory.
+All scripts use `Path.cwd()` as vault root. Run them from your vault directory.
+
+## Citation Resolution
+
+The resolver turns `[N]` markers in NotebookLM answers into clickable `[[Source#^c-XXXXXXXX|[N]]]` wikilinks. Click to jump to the exact cited passage in the source transcript.
+
+- Anchor IDs are stable (MD5 of cited text)
+- Idempotent: re-running same question skips existing anchors
+- Cross-source citation remap: handles collapsed source_ids
+- ~96% resolution rate across tested queries
+
+## Examples
+
+- **Health:** 300 Huberman episodes -> personalized health protocol with sleep, supplements, exercise experiments
+- **Product:** 200 Lenny's Podcast episodes -> product strategy playbook with cited frameworks
+- **New job:** Onboarding docs + team wikis + architecture decisions -> ramp-up plan with daily experiments
+- **Business:** Hormozi content -> offer audit with value equation scoring
+
+## License
+
+MIT
